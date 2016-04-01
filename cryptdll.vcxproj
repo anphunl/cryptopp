@@ -120,7 +120,7 @@ echo mac done &gt; "$(OutDir)"\cryptopp.mac.done
       <AdditionalDependencies>cryptlib.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <OutputFile>$(OutDir)cryptopp.dll</OutputFile>
       <SuppressStartupBanner>true</SuppressStartupBanner>
-      <AdditionalLibraryDirectories>$(Platform)\DLL_Output\$(Configuration) $(NOINHERIT);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>$(Platform)\DLL_Output\$(Configuration) $(NOINHERIT);D:\PERSONAL\CPP\cryptopp\Win32\Output\Release;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <ProgramDatabaseFile>$(TargetDir)\cryptopp.pdb</ProgramDatabaseFile>
       <OptimizeReferences>true</OptimizeReferences>
