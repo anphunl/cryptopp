@@ -17,7 +17,25 @@ LOCAL_PATH := $(call my-dir)
 include $(CLEAR_VARS)
 
 LOCAL_MODULE    := cryptopp
-LOCAL_CPP_FEATURES += exceptions
+
+
+ifeq ($(TARGET_ARCH_ABI),arm64-v8a)
+    LOCAL_CPPFLAGS +=-funwind-tables -fexceptions -frtti
+else ifeq ($(TARGET_ARCH_ABI),armeabi)
+    LOCAL_CPPFLAGS +=-march=armv5te -mtune=xscale -mthumb -msoft-float -funwind-tables -fexceptions -frtti
+else ifeq ($(TARGET_ARCH_ABI),armeabi-v7a)
+    LOCAL_CPPFLAGS +=-march=armv7-a -mthumb -mfpu=vfpv3-d16 -mfloat-abi=softfp -Wl,--fix-cortex-a8 -funwind-tables -fexceptions -frtti
+else ifeq ($(TARGET_ARCH_ABI),mips)
+    LOCAL_CPPFLAGS +=-funwind-tables -fexceptions -frtti
+else ifeq ($(TARGET_ARCH_ABI),mips64)
+    LOCAL_CPPFLAGS +=-funwind-tables -fexceptions -frtti
+else ifeq ($(TARGET_ARCH_ABI),x86)
+    LOCAL_CPPFLAGS +=-march=i686 -mtune=intel -mssse3 -mfpmath=sse -funwind-tables -fexceptions -frtti
+else ifeq ($(TARGET_ARCH_ABI),x86_64)
+    LOCAL_CPPFLAGS +=-march=x86-64 -msse4.2 -mpopcnt -mtune=intel -funwind-tables -fexceptions -frtti
+else
+    LOCAL_CPPFLAGS +=-fexceptions -frtti
+endif
 
 
 LOCAL_SRC_FILES := ../../3way.cpp \
