@@ -18,6 +18,7 @@ bool TestRDSEED();
 
 bool ValidateBaseCode();
 bool ValidateCRC32();
+bool ValidateCRC32C();
 bool ValidateAdler32();
 bool ValidateMD2();
 bool ValidateMD4();
@@ -28,6 +29,8 @@ bool ValidateTiger();
 bool ValidateRIPEMD();
 bool ValidatePanama();
 bool ValidateWhirlpool();
+bool ValidateBLAKE2s();
+bool ValidateBLAKE2b();
 
 bool ValidateHMAC();
 bool ValidateTTMAC();
@@ -68,6 +71,8 @@ bool ValidateCMAC();
 bool ValidateBBS();
 bool ValidateDH();
 bool ValidateMQV();
+bool ValidateHMQV();
+bool ValidateFHMQV();
 bool ValidateRSA();
 bool ValidateElGamal();
 bool ValidateDLIES();
@@ -85,9 +90,10 @@ bool ValidateEC2N();
 bool ValidateECDSA();
 bool ValidateESIGN();
 
-#if !defined(NDEBUG)
+#if CRYPTOPP_DEBUG
 bool TestSecBlock();
 bool TestPolynomialMod2();
+bool TestHuffmanCodes();
 #endif
 
 // Coverity finding

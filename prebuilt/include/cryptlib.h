@@ -3,7 +3,7 @@
 //! \file cryptlib.h
 //! \brief Abstract base classes that provide a uniform interface to this library.
 
-/*!	\mainpage Crypto++ Library 5.6.3 API Reference
+/*!	\mainpage Crypto++ Library 5.6.5 API Reference
 <dl>
 <dt>Abstract Base Classes<dd>
 	cryptlib.h
@@ -15,13 +15,13 @@
 	\ref SHACAL2 "SHACAL-2", SHARK, SKIPJACK,
 Square, TEA, \ref ThreeWay "3-Way", Twofish, XTEA
 <dt>Stream Ciphers<dd>
-	\ref Panama "Panama-LE", \ref Panama "Panama-BE", Salsa20, \ref SEAL "SEAL-LE", \ref SEAL "SEAL-BE", WAKE, XSalsa20
+	ChaCha8, ChaCha12, ChaCha20, \ref Panama "Panama-LE", \ref Panama "Panama-BE", Salsa20, \ref SEAL "SEAL-LE", \ref SEAL "SEAL-BE", WAKE, XSalsa20
 <dt>Hash Functions<dd>
-	SHA1, SHA224, SHA256, SHA384, SHA512, \ref SHA3 "SHA-3", Tiger, Whirlpool, RIPEMD160, RIPEMD320, RIPEMD128, RIPEMD256, Weak::MD2, Weak::MD4, Weak::MD5
+	BLAKE2s, BLAKE2b, \ref Keccak "Keccak (F1600)", SHA1, SHA224, SHA256, SHA384, SHA512, \ref SHA3 "SHA-3", Tiger, Whirlpool, RIPEMD160, RIPEMD320, RIPEMD128, RIPEMD256, Weak::MD2, Weak::MD4, Weak::MD5
 <dt>Non-Cryptographic Checksums<dd>
 	CRC32, Adler32
 <dt>Message Authentication Codes<dd>
-	VMAC, HMAC, CBC_MAC, CMAC, DMAC, TTMAC, \ref GCM "GCM (GMAC)"
+	VMAC, HMAC, CBC_MAC, CMAC, DMAC, TTMAC, \ref GCM "GCM (GMAC)", BLAKE2
 <dt>Random Number Generators<dd>
 	NullRNG(), LC_RNG, RandomPool, BlockingRng, NonblockingRng, AutoSeededRandomPool, AutoSeededX917RNG,
 	\ref MersenneTwister "MersenneTwister (MT19937 and MT19937-AR)", RDRAND, RDSEED
@@ -32,7 +32,7 @@ Square, TEA, \ref ThreeWay "3-Way", Twofish, XTEA
 <dt>Public Key Signature Schemes<dd>
 	DSA2, GDSA, ECDSA, NR, ECNR, LUCSS, RSASS, RSASS_ISO, RabinSS, RWSS, ESIGN
 <dt>Key Agreement<dd>
-	DH, DH2, MQV, ECDH, ECMQV, XTR_DH
+	DH, DH2, \ref MQV_Domain "MQV", \ref HMQV_Domain "HMQV", \ref FHMQV_Domain "FHMQV", ECDH, ECMQV, ECHMQV, ECFHMQV, XTR_DH
 <dt>Algebraic Structures<dd>
 	Integer, PolynomialMod2, PolynomialOver, RingOfPolynomialsOver,
 	ModularArithmetic, MontgomeryRepresentation, GFP2_ONB, GF2NP, GF256, GF2_32, EC2N, ECP
@@ -85,6 +85,11 @@ and getting us started on the manual.
 
 #include "config.h"
 #include "stdcpp.h"
+#include "trap.h"
+
+#if defined(CRYPTOPP_BSD_AVAILABLE) || defined(CRYPTOPP_UNIX_AVAILABLE)
+# include <signal.h>
+#endif
 
 #if CRYPTOPP_MSC_VERSION
 # pragma warning(push)
@@ -161,12 +166,12 @@ public:
 	//! \brief Construct a new  Exception
 	explicit Exception(ErrorType errorType, const std::string &s) : m_errorType(errorType), m_what(s) {}
 	virtual ~Exception() throw() {}
-	
+
 	//! \brief Retrieves a C-string describing the exception
 	const char *what() const throw() {return (m_what.c_str());}
-	//! \brief Retrieves a  string describing the exception
+	//! \brief Retrieves a string describing the exception
 	const std::string &GetWhat() const {return m_what;}
-	//! \brief Sets the error  string for the exception
+	//! \brief Sets the error string for the exception
 	void SetWhat(const std::string &s) {m_what = s;}
 	//! \brief Retrieves the error type for the exception
 	ErrorType GetErrorType() const {return m_errorType;}
@@ -269,7 +274,7 @@ struct CRYPTOPP_DLL DecodingResult
 //!   and to read values from keys and crypto parameters.
 //! \details To obtain an object that implements NameValuePairs for the purpose of parameter
 //!   passing, use the MakeParameters() function.
-//! \details To get a value from NameValuePairs, you need to know the name and the type of the value. 
+//! \details To get a value from NameValuePairs, you need to know the name and the type of the value.
 //!   Call GetValueNames() on a NameValuePairs object to obtain a list of value names that it supports.
 //!   then look at the Name namespace documentation to see what the type of each value is, or
 //!   alternatively, call GetIntValue() with the value name, and if the type is not int, a
@@ -296,7 +301,7 @@ public:
 		//! \brief Provides the stored type
 		//! \return the C++ mangled name of the type
 		const std::type_info & GetStoredTypeInfo() const {return m_stored;}
-		
+
 		//! \brief Provides the retrieveing type
 		//! \return the C++ mangled name of the type
 		const std::type_info & GetRetrievingTypeInfo() const {return m_retrieving;}
@@ -328,7 +333,7 @@ public:
 	//! \tparam T class or type
 	//! \param name the name of the object or value to retrieve
 	//! \param value reference to a variable that receives the value
-	//! \return  true if the value was retrieved,  false otherwise
+	//! \returns true if the value was retrieved, false otherwise
 	//! \sa GetValue(), GetValueWithDefault(), GetIntValue(), GetIntValueWithDefault(),
 	//!   GetRequiredParameter() and GetRequiredIntParameter()
 	template <class T>
@@ -398,8 +403,8 @@ public:
 	//! \param name the name of the value
 	//! \param value reference to a variable to receive the value
 	//! \throws InvalidArgument
-	//! \details GetRequiredParameter() throws  InvalidArgument if the  name
-	//!   is not present or not of the expected type  T.
+	//! \details GetRequiredParameter() throws InvalidArgument if the name
+	//!   is not present or not of the expected type T.
 	//! \sa GetValue(), GetValueWithDefault(), GetIntValue(), GetIntValueWithDefault(),
 	//!   GetRequiredParameter() and GetRequiredIntParameter()
 	template <class T>
@@ -414,8 +419,8 @@ public:
 	//! \param name the name of the value
 	//! \param value reference to a variable to receive the value
 	//! \throws InvalidArgument
-	//! \details GetRequiredParameter() throws  InvalidArgument if the  name
-	//!   is not present or not of the expected type  T.
+	//! \details GetRequiredParameter() throws InvalidArgument if the name
+	//!   is not present or not of the expected type T.
 	//! \sa GetValue(), GetValueWithDefault(), GetIntValue(), GetIntValueWithDefault(),
 	//!   GetRequiredParameter() and GetRequiredIntParameter()
 	CRYPTOPP_DLL void GetRequiredIntParameter(const char *className, const char *name, int &value) const
@@ -423,12 +428,12 @@ public:
 		if (!GetIntValue(name, value))
 			throw InvalidArgument(std::string(className) + ": missing required parameter '" + name + "'");
 	}
-	
+
 	//! \brief Get a named value
 	//! \param name the name of the object or value to retrieve
 	//! \param valueType reference to a variable that receives the value
 	//! \param pValue void pointer to a variable that receives the value
-	//! \return  true if the value was retrieved,  false otherwise
+	//! \returns true if the value was retrieved, false otherwise
 	//! \details GetVoidValue() retrives the value of  name if it exists.
 	//! \note  GetVoidValue() is an internal function and should be implemented
 	//!   by derived classes. Users should use one of the other functions instead.
@@ -451,8 +456,18 @@ DOCUMENTED_NAMESPACE_BEGIN(Name)
 DOCUMENTED_NAMESPACE_END
 
 //! \brief Namespace containing weak and wounded algorithms.
-//! \details Weak is part of the CryptoPP namespace. Schemes and algorithms are moved into  Weak
-//!   when their security level is reduced to an unacceptable value by contemporary standards.
+//! \details Weak is part of the CryptoPP namespace. Schemes and algorithms are moved into Weak
+//!   when their security level is reduced to an unacceptable level by contemporary standards.
+//! \details To use an algorithm in the Weak namespace, you must <tt>\c \#define
+//!   CRYPTOPP_ENABLE_NAMESPACE_WEAK 1</tt> before including a header for a weak or wounded
+//!   algorithm. For example:
+//!   <pre>
+//!     \c \#define CRYPTOPP_ENABLE_NAMESPACE_WEAK 1
+//!     \c \#include <md5.h>
+//!     ...
+//!     CryptoPP::Weak::MD5 md5;
+//!   </pre>
+
 DOCUMENTED_NAMESPACE_BEGIN(Weak)
 // weak and wounded algorithms
 DOCUMENTED_NAMESPACE_END
@@ -471,12 +486,12 @@ class CRYPTOPP_DLL CRYPTOPP_NO_VTABLE Clonable
 {
 public:
 	virtual ~Clonable() {}
-	
+
 	//! \brief Copies  this object
 	//! \return a copy of this object
 	//! \throws NotImplemented
 	//! \note this is \a not implemented by most classes
-	//! \sa  NotCopyable
+	//! \sa NotCopyable
 	virtual Clonable* Clone() const {throw NotImplemented("Clone() is not implemented yet.");}	// TODO: make this =0
 };
 
@@ -498,7 +513,7 @@ public:
 	//!   versions of the library when the library is built as a DLL on Windows. Also see
 	//!    CRYPTOPP_ENABLE_COMPLIANCE_WITH_FIPS_140_2 in config.h.
 	Algorithm(bool checkSelfTestStatus = true);
-	
+
 	//! \brief Provides the name of this algorithm
 	//! \return the standard algorithm name
 	//! \details The standard algorithm name can be a name like \a AES or \a AES/GCM. Some algorithms
@@ -599,19 +614,20 @@ public:
 	//! \note If this function returns true, and no IV is passed to SetKey() and <tt>CanUseStructuredIVs()==true</tt>,
 	//!   an IV of all 0's will be assumed.
 	bool IsResynchronizable() const {return IVRequirement() < NOT_RESYNCHRONIZABLE;}
-	
+
 	//! \brief Determines if the object can use random IVs
 	//! \return true if the object can use random IVs (in addition to ones returned by GetNextIV), false otherwise
 	bool CanUseRandomIVs() const {return IVRequirement() <= UNPREDICTABLE_RANDOM_IV;}
-	
+
 	//! \brief Determines if the object can use random but possibly predictable IVs
 	//! \return true if the object can use random but possibly predictable IVs (in addition to ones returned by
 	//!    GetNextIV), false otherwise
 	bool CanUsePredictableIVs() const {return IVRequirement() <= RANDOM_IV;}
-	
+
 	//! \brief Determines if the object can use structured IVs
-	//! returns whether the object can use structured IVs, for example a counter (in addition to ones returned by
-	//!    GetNextIV), false otherwise
+	//! \returns true if the object can use structured IVs, false otherwise
+	//! \details CanUseStructuredIVs() indicates whether the object can use structured IVs; for example a counter
+	//!    (in addition to ones returned by GetNextIV).
 	bool CanUseStructuredIVs() const {return IVRequirement() <= UNIQUE_IV;}
 
 	//! \brief Returns length of the IV accepted by this object
@@ -624,12 +640,12 @@ public:
 	//! \brief Provides the default size of an IV
 	//! \return default length of IVs accepted by this object, in bytes
 	unsigned int DefaultIVLength() const {return IVSize();}
-	
+
 	//! \brief Provides the minimum size of an IV
 	//! \return minimal length of IVs accepted by this object, in bytes
 	//! \throws NotImplemented() if the object does not support resynchronization
 	virtual unsigned int MinIVLength() const {return IVSize();}
-	
+
 	//! \brief Provides the maximum size of an IV
 	//! \return maximal length of IVs accepted by this object, in bytes
 	//! \throws NotImplemented() if the object does not support resynchronization
@@ -660,26 +676,26 @@ protected:
 	//! \brief Returns the base class  Algorithm
 	//! \return the base class  Algorithm
 	virtual const Algorithm & GetAlgorithm() const =0;
-	
+
 	//! \brief Sets the key for this object without performing parameter validation
 	//! \param key a byte buffer used to key the cipher
 	//! \param length the length of the byte buffer
 	//! \param params additional parameters passed as  NameValuePairs
-	//! \details key must be at least  DEFAULT_KEYLENGTH in length.
+	//! \details key must be at least DEFAULT_KEYLENGTH in length.
 	virtual void UncheckedSetKey(const byte *key, unsigned int length, const NameValuePairs &params) =0;
-	
+
 	//! \brief Validates the key length
 	//! \param length the size of the keying material, in bytes
 	//! \throws InvalidKeyLength if the key length is invalid
 	void ThrowIfInvalidKeyLength(size_t length);
-	
+
 	//! \brief Validates the object
 	//! \throws InvalidArgument if the IV is present
-	//! \details Internally, the default implementation calls  IsResynchronizable() and throws 
+	//! \details Internally, the default implementation calls  IsResynchronizable() and throws
 	//!    InvalidArgument if the function returns  true.
 	//! \note called when no IV is passed
 	void ThrowIfResynchronizable();
-	
+
 	//! \brief Validates the IV
 	//! \param iv the IV with a length of  IVSize, in bytes
 	//! \throws InvalidArgument on failure
@@ -688,23 +704,23 @@ protected:
 	//!    UNPREDICTABLE_RANDOM_IV. If  IVRequirement is  UNPREDICTABLE_RANDOM_IV, then
 	//!   then the function succeeds. Otherwise, an exception is thrown.
 	void ThrowIfInvalidIV(const byte *iv);
-	
+
 	//! \brief Validates the IV length
 	//! \param length the size of an IV, in bytes
 	//! \throws InvalidArgument if the number of  rounds are invalid
 	size_t ThrowIfInvalidIVLength(int length);
-	
+
 	//! \brief Retrieves and validates the IV
-	//! \param params  NameValuePairs with the IV supplied as a  ConstByteArrayParameter
+	//! \param params  NameValuePairs with the IV supplied as a ConstByteArrayParameter
 	//! \param size the length of the IV, in bytes
 	//! \return a pointer to the first byte of the  IV
 	//! \throws InvalidArgument if the number of  rounds are invalid
 	const byte * GetIVAndThrowIfInvalid(const NameValuePairs &params, size_t &size);
-	
+
 	//! \brief Validates the key length
 	//! \param length the size of the keying material, in bytes
 	inline void AssertValidKeyLength(size_t length) const
-		{CRYPTOPP_UNUSED(length); assert(IsValidKeyLength(length));}
+		{CRYPTOPP_UNUSED(length); CRYPTOPP_ASSERT(IsValidKeyLength(length));}
 };
 
 //! \brief Interface for the data processing part of block ciphers
@@ -762,7 +778,7 @@ public:
 	virtual bool IsPermutation() const {return true;}
 
 	//! \brief Determines if the cipher is being operated in its forward direction
-	//! \return  true if DIR is ENCRYPTION,  false otherwise
+	//! \returns true if DIR is ENCRYPTION, false otherwise
 	//! \sa IsForwardTransformation(), IsPermutation(), GetCipherDirection()
 	virtual bool IsForwardTransformation() const =0;
 
@@ -777,11 +793,11 @@ public:
 		BT_InBlockIsCounter=1,
 		//! \brief should not modify block pointers
 		BT_DontIncrementInOutPointers=2,
-		//! \brief 
+		//! \brief
 		BT_XorInput=4,
 		//! \brief perform the transformation in reverse
 		BT_ReverseDirection=8,
-		//! \brief 
+		//! \brief
 		BT_AllowParallel=16};
 
 	//! \brief Encrypt and xor multiple blocks using additional flags
@@ -825,11 +841,11 @@ public:
 	//! \note Optimal input length is
 	//!   <tt>n * OptimalBlockSize() - GetOptimalBlockSizeUsed()</tt> for any <tt>n \> 0</tt>.
 	virtual unsigned int OptimalBlockSize() const {return MandatoryBlockSize();}
-	
+
 	//! \brief Provides the number of bytes used in the current block when processing at optimal block size.
 	//! \return the number of bytes used in the current block when processing at the optimal block size
 	virtual unsigned int GetOptimalBlockSizeUsed() const {return 0;}
-	
+
 	//! \brief Provides input and output data alignment for optimal performance.
 	//! \return the input data alignment that provides optimal performance
 	virtual unsigned int OptimalDataAlignment() const;
@@ -849,7 +865,10 @@ public:
 	//!   Currently the only use of this function is CBC-CTS mode.
 	virtual void ProcessLastBlock(byte *outString, const byte *inString, size_t length);
 
-	//! returns the minimum size of the last block, 0 indicating the last block is not special
+	//! \brief Provides the size of the last block
+	//! \returns the minimum size of the last block
+	//! \details MinLastBlockSize() returns the minimum size of the last block. 0 indicates the last
+	//!   block is not special.
 	virtual unsigned int MinLastBlockSize() const {return 0;}
 
 	//! \brief Encrypt or decrypt a string of bytes
@@ -874,29 +893,29 @@ public:
 		{ProcessData(&input, &input, 1); return input;}
 
 	//! \brief Determines whether the cipher supports random access
-	//! \return  true if the cipher supports random access,  false otherwise
+	//! \returns true if the cipher supports random access, false otherwise
 	virtual bool IsRandomAccess() const =0;
 
 	//! \brief Seek to an absolute position
 	//! \param pos position to seek
 	//! \throws NotImplemented
 	//! \details The base class implementation throws NotImplemented. The function
-	//!   asserts  IsRandomAccess() in debug builds.
+	//!   \ref CRYPTOPP_ASSERT "asserts" IsRandomAccess() in debug builds.
 	virtual void Seek(lword pos)
 	{
 		CRYPTOPP_UNUSED(pos);
-		assert(!IsRandomAccess());
+		CRYPTOPP_ASSERT(!IsRandomAccess());
 		throw NotImplemented("StreamTransformation: this object doesn't support random access");
 	}
 
 	//! \brief Determines whether the cipher is self-inverting
-	//! \return  true if the cipher is self-inverting,  false otherwise
-	//! \details IsSelfInverting determines whether this transformation is 
+	//! \returns true if the cipher is self-inverting, false otherwise
+	//! \details IsSelfInverting determines whether this transformation is
 	//!   self-inverting (e.g. xor with a keystream).
 	virtual bool IsSelfInverting() const =0;
 
 	//! \brief Determines if the cipher is being operated in its forward direction
-	//! \return  true if DIR is ENCRYPTION,  false otherwise
+	//! \returns true if DIR is ENCRYPTION, false otherwise
 	//! \sa IsForwardTransformation(), IsPermutation(), GetCipherDirection()
 	virtual bool IsForwardTransformation() const =0;
 };
@@ -957,7 +976,7 @@ public:
 	//! \return the tag size of the hash.
 	//! \details Same as DigestSize().
 	unsigned int TagSize() const {return DigestSize();}
-	
+
 	//! \brief Provides the block size of the compression function
 	//! \return the block size of the compression function, in bytes
 	//! \details BlockSize() will return 0 if the hash is not block based. For example,
@@ -974,7 +993,7 @@ public:
 	//! \brief Provides input and output data alignment for optimal performance
 	//! \return the input data alignment that provides optimal performance
 	virtual unsigned int OptimalDataAlignment() const;
-	
+
 	//! \brief Updates the hash with additional input and computes the hash of the current message
 	//! \param digest a pointer to the buffer to receive the hash
 	//! \param input the additional input as a buffer
@@ -986,7 +1005,7 @@ public:
 	//!   the output byte buffer is large enough for the digest.
 	virtual void CalculateDigest(byte *digest, const byte *input, size_t length)
 		{Update(input, length); Final(digest);}
-	
+
 	//! \brief Verifies the hash of the current message
 	//! \param digest a pointer to the buffer of an \a existing hash
 	//! \return \p true if the existing hash matches the computed hash, \p false otherwise
@@ -1018,10 +1037,8 @@ public:
 	//! \brief Computes the hash of the current message
 	//! \param digest a pointer to the buffer to receive the hash
 	//! \param digestSize the size of the truncated digest, in bytes
-	//! \details TruncatedFinal() call Final() and then copies digestSize bytes to digest
-	//! \details TruncatedFinal() restarts the hash for the next message.
-	//! \pre <tt>COUNTOF(digest) == DigestSize()</tt> or <tt>COUNTOF(digest) == HASH::DIGESTSIZE</tt> ensures
-	//!   the output byte buffer is large enough for the digest.
+	//! \details TruncatedFinal() call Final() and then copies digestSize bytes to digest.
+	//!   The hash is restarted the hash for the next message.
 	virtual void TruncatedFinal(byte *digest, size_t digestSize) =0;
 
 	//! \brief Updates the hash with additional input and computes the hash of the current message
@@ -1136,7 +1153,7 @@ public:
 	//!   This is the case for some schemes, such as CCM.
 	//! \sa SpecifyDataLengths()
 	virtual bool NeedsPrespecifiedDataLengths() const {return false;}
-	//! \brief Prespecifies the data lengths 
+	//! \brief Prespecifies the data lengths
 	//! \details this function only needs to be called if NeedsPrespecifiedDataLengths() returns true
 	//! \sa NeedsPrespecifiedDataLengths()
 	void SpecifyDataLengths(lword headerLength, lword messageLength, lword footerLength=0);
@@ -1182,7 +1199,7 @@ public:
 
 	//! \brief Update RNG state with additional unpredictable values
 	//! \param input the entropy to add to the generator
-	//! \param length the size of the input buffer 
+	//! \param length the size of the input buffer
 	//! \throws NotImplemented
 	//! \details A generator may or may not accept additional entropy. Call CanIncorporateEntropy() to test for the
 	//!   ability to use additional entropy.
@@ -1271,7 +1288,7 @@ public:
 //! \brief Random Number Generator that does not produce random numbers
 //! \return reference that can be passed to functions that require a RandomNumberGenerator
 //! \details NullRNG() returns a reference that can be passed to functions that require a
-//!   RandomNumberGenerator but don't actually use it. The NullRNG() throws NotImplemented 
+//!   RandomNumberGenerator but don't actually use it. The NullRNG() throws NotImplemented
 //!   when a generation function is called.
 //! \sa ClassNullRNG, PK_SignatureScheme::IsProbabilistic()
 CRYPTOPP_DLL RandomNumberGenerator & CRYPTOPP_API NullRNG();
@@ -1383,7 +1400,7 @@ public:
 		//! \param blocking specifies whether the object should block when processing input
 		//! \return the number of bytes that remain in the block (i.e., bytes not processed)
 		size_t PutWord16(word16 value, ByteOrder order=BIG_ENDIAN_ORDER, bool blocking=true);
-		
+
 		//! Input a 32-bit word for processing.
 		//! \param value the 32-bit value to be processed.
 		//! \param order the  ByteOrder in which the word should be processed.
@@ -1481,7 +1498,7 @@ public:
 
 	//!	\name SIGNALS
 	//@{
-		
+
 		//! \brief Initialize or reinitialize this object, without signal propagation
 		//! \param parameters a set of NameValuePairs to initialize this object
 		//! \throws NotImplemented
@@ -1496,13 +1513,13 @@ public:
 			CRYPTOPP_UNUSED(parameters);
 			throw NotImplemented("BufferedTransformation: this object can't be reinitialized");
 		}
-		
+
 		//! \brief Flushes data buffered by this object, without signal propagation
 		//! \param hardFlush indicates whether all data should be flushed
 		//! \param blocking specifies whether the object should block when processing input
 		//! \note  hardFlush must be used with care
 		virtual bool IsolatedFlush(bool hardFlush, bool blocking) =0;
-		
+
 		//! \brief Marks the end of a series of messages, without signal propagation
 		//! \param blocking specifies whether the object should block when completing the processing on
 		//!    the current series of messages
@@ -1512,7 +1529,7 @@ public:
 		//! \brief Initialize or reinitialize this object, with signal propagation
 		//! \param parameters a set of NameValuePairs to initialize or reinitialize this object
 		//! \param propagation the number of attached transformations the Initialize() signal should be passed
-		//! \details Initialize() is used to initialize or reinitialize an object using a variable number of 
+		//! \details Initialize() is used to initialize or reinitialize an object using a variable number of
 		//!   arbitrarily typed arguments. The function avoids the need for multiple constuctors providing
 		//!   all possible combintations of configurable parameters.
 		//! \details propagation count includes this object. Setting propagation to <tt>1</tt> means this
@@ -1526,7 +1543,7 @@ public:
 		//! \details propagation count includes this object. Setting propagation to <tt>1</tt> means this
 		//!   object only. Setting propagation to <tt>-1</tt> means unlimited propagation.
 		//! \note Hard flushes must be used with care. It means try to process and output everything, even if
-		//!   there may not be enough data to complete the action. For example, hard flushing a  HexDecoder
+		//!   there may not be enough data to complete the action. For example, hard flushing a HexDecoder
 		//!   would cause an error if you do it after inputing an odd number of hex encoded characters.
 		//! \note For some types of filters, like  ZlibDecompressor, hard flushes can only
 		//!   be done at "synchronization points". These synchronization points are positions in the data
@@ -1542,11 +1559,11 @@ public:
 		//!    propagation, and then pass the signal on to attached transformations if the value is not 0.
 		//! \details propagation count includes this object. Setting propagation to <tt>1</tt> means this
 		//!   object only. Setting propagation to <tt>-1</tt> means unlimited propagation.
-		//! \note There should be a  MessageEnd() immediately before MessageSeriesEnd().
+		//! \note There should be a MessageEnd() immediately before MessageSeriesEnd().
 		virtual bool MessageSeriesEnd(int propagation=-1, bool blocking=true);
 
 		//! \brief Set propagation of automatically generated and transferred signals
-		//! \param propagation then new value 
+		//! \param propagation then new value
 		//! \details Setting propagation to <tt>0</tt> means do not automaticly generate signals. Setting
 		//!    propagation to <tt>-1</tt> means unlimited propagation.
 		virtual void SetAutoSignalPropagation(int propagation)
@@ -1573,7 +1590,7 @@ public:
 		virtual lword MaxRetrievable() const;
 
 		//! \brief Determines whether bytes are ready for retrieval
-		//! \return  true if bytes are available for retrieval, false otherwise
+		//! \returns true if bytes are available for retrieval, false otherwise
 		virtual bool AnyRetrievable() const;
 
 		//! \brief Retrieve a 8-bit byte
@@ -1581,7 +1598,7 @@ public:
 		//! \return the number of bytes consumed during the call.
 		//! \details Use the return value of  Get to detect short reads.
 		virtual size_t Get(byte &outByte);
-		
+
 		//! \brief Retrieve a block of bytes
 		//! \param outString a block of bytes
 		//! \param getMax the number of bytes to  Get
@@ -1595,7 +1612,7 @@ public:
 		//! \details Peek does not remove bytes from the object. Use the return value of
 		//!     Get to detect short reads.
 		virtual size_t Peek(byte &outByte) const;
-		
+
 		//! \brief Peek a block of bytes
 		//! \param outString a block of bytes
 		//! \param peekMax the number of bytes to  Peek
@@ -1635,7 +1652,7 @@ public:
 		size_t PeekWord32(word32 &value, ByteOrder order=BIG_ENDIAN_ORDER) const;
 
 		//! move transferMax bytes of the buffered output to target as input
-		
+
 		//! \brief Transfer bytes from this object to another BufferedTransformation
 		//! \param target the destination BufferedTransformation
 		//! \param transferMax the number of bytes to transfer
@@ -1646,13 +1663,20 @@ public:
 		lword TransferTo(BufferedTransformation &target, lword transferMax=LWORD_MAX, const std::string &channel=DEFAULT_CHANNEL)
 			{TransferTo2(target, transferMax, channel); return transferMax;}
 
-		//! \brief Discard  skipMax bytes from the output buffer
+		//! \brief Discard skipMax bytes from the output buffer
 		//! \param skipMax the number of bytes to discard
-		//! \details Skip always returns  skipMax.
+		//! \details Skip() discards bytes from the output buffer, which is the AttachedTransformation(), if present.
+		//!   The function always returns skipMax.
+		//! \details If you want to skip bytes from a Source, then perform the following.
+		//! <pre>StringSource ss(str, false, new Redirector(TheBitBucket()));
+		//! ss.Pump(10);    // Skip 10 bytes from Source
+		//! ss.Detach(new FilterChain(...));
+		//! ss.PumpAll();
+		//! </pre>
 		virtual lword Skip(lword skipMax=LWORD_MAX);
 
 		//! copy copyMax bytes of the buffered output to target as input
-		
+
 		//! \brief Copy bytes from this object to another BufferedTransformation
 		//! \param target the destination BufferedTransformation
 		//! \param copyMax the number of bytes to copy
@@ -1662,7 +1686,7 @@ public:
 		//! \details The function always returns  copyMax. If an accurate count is needed, then use  CopyRangeTo2.
 		lword CopyTo(BufferedTransformation &target, lword copyMax=LWORD_MAX, const std::string &channel=DEFAULT_CHANNEL) const
 			{return CopyRangeTo(target, 0, copyMax, channel);}
-		
+
 		//! \brief Copy bytes from this object using an index to another BufferedTransformation
 		//! \param target the destination BufferedTransformation
 		//! \param position the 0-based index of the byte stream to begin the copying
@@ -1695,7 +1719,7 @@ public:
 		virtual unsigned int NumberOfMessages() const;
 
 		//! \brief Determines if any messages are available for retrieval
-		//! \return  true if <tt>NumberOfMessages() &gt; 0</tt>,  false otherwise
+		//! \returns true if <tt>NumberOfMessages() &gt; 0</tt>, false otherwise
 		//! \details AnyMessages returns true if <tt>NumberOfMessages() &gt; 0</tt>
 		virtual bool AnyMessages() const;
 
@@ -1767,10 +1791,10 @@ public:
 
 	//!	\name NON-BLOCKING TRANSFER OF OUTPUT
 	//@{
-		
+
 		// upon return, byteCount contains number of bytes that have finished being transfered,
 		// and returns the number of bytes left in the current transfer block
-		
+
 		//! \brief Transfer bytes from this object to another BufferedTransformation
 		//! \param target the destination BufferedTransformation
 		//! \param byteCount the number of bytes to transfer
@@ -1784,10 +1808,10 @@ public:
 		//!   byteCount is the requested size of the transfer. When the call returns, byteCount is
 		//!   the number of bytes that were transferred.
 		virtual size_t TransferTo2(BufferedTransformation &target, lword &byteCount, const std::string &channel=DEFAULT_CHANNEL, bool blocking=true) =0;
-		
+
 		// upon return, begin contains the start position of data yet to be finished copying,
 		// and returns the number of bytes left in the current transfer block
-	
+
 		//! \brief Copy bytes from this object to another BufferedTransformation
 		//! \param target the destination BufferedTransformation
 		//! \param begin the 0-based index of the first byte to copy in the stream
@@ -1803,7 +1827,7 @@ public:
 		//!   byte that was \a not copied (which may be different tahn  end).  begin can be used for
 		//!   subsequent calls to  CopyRangeTo2.
 		virtual size_t CopyRangeTo2(BufferedTransformation &target, lword &begin, lword end=LWORD_MAX, const std::string &channel=DEFAULT_CHANNEL, bool blocking=true) const =0;
-		
+
 		// upon return, messageCount contains number of messages that have finished being transfered,
 		// and returns the number of bytes left in the current transfer block
 
@@ -1818,9 +1842,9 @@ public:
 		//!   the number of messages requested to  be transferred. When the call returns, messageCount is the
 		//!   number of messages actually transferred.
 		size_t TransferMessagesTo2(BufferedTransformation &target, unsigned int &messageCount, const std::string &channel=DEFAULT_CHANNEL, bool blocking=true);
-		
+
 		// returns the number of bytes left in the current transfer block
-		
+
 		//! \brief Transfer all bytes from this object to another BufferedTransformation
 		//! \param target the destination BufferedTransformation
 		//! \param channel the channel on which the transfer should occur
@@ -1876,7 +1900,7 @@ public:
 		//! \return 0 indicates all bytes were processed during the call. Non-0 indicates the
 		//!   number of bytes that were \a not processed.
 		size_t ChannelPutWord16(const std::string &channel, word16 value, ByteOrder order=BIG_ENDIAN_ORDER, bool blocking=true);
-		
+
 		//! \brief Input a 32-bit word for processing on a channel.
 		//! \param channel the channel to process the data.
 		//! \param value the 32-bit value to be processed.
@@ -1896,7 +1920,7 @@ public:
 		//!   object only. Setting propagation to <tt>-1</tt> means unlimited propagation.
 		bool ChannelMessageEnd(const std::string &channel, int propagation=-1, bool blocking=true)
 			{return !!ChannelPut2(channel, NULL, 0, propagation < 0 ? -1 : propagation+1, blocking);}
-		
+
 		//! \brief Input multiple bytes for processing and signal the end of a message
 		//! \param channel the channel to process the data.
 		//! \param inString the byte buffer to process
@@ -1930,7 +1954,7 @@ public:
 		//! \param blocking specifies whether the object should block when processing input.
 		//! \return the number of bytes that remain in the block (i.e., bytes not processed)
 		virtual size_t ChannelPut2(const std::string &channel, const byte *inString, size_t length, int messageEnd, bool blocking);
-		
+
 		//! \brief Input multiple bytes that may be modified by callee on a channel
 		//! \param channel the channel to process the data
 		//! \param inString the byte buffer to process
@@ -1958,7 +1982,7 @@ public:
 		//!     propagation, and then pass the signal on to attached transformations if the value is not 0.
 		//! \details propagation count includes this object. Setting propagation to <tt>1</tt> means this
 		//!   object only. Setting propagation to <tt>-1</tt> means unlimited propagation.
-		//! \note There should be a  MessageEnd() immediately before MessageSeriesEnd().
+		//! \note There should be a MessageEnd() immediately before MessageSeriesEnd().
 		virtual bool ChannelMessageSeriesEnd(const std::string &channel, int propagation=-1, bool blocking=true);
 
 		//! \brief Sets the default retrieval channel
@@ -1975,15 +1999,15 @@ public:
 	//@{
 		//! \brief Determines whether the object allows attachment
 		//! \return true if the object allows an attachment, false otherwise
-		//! \details Sources and  Filters will return  true, while  Sinks and other objects will return  false.
+		//! \details Sources and  Filters will returns true, while  Sinks and other objects will return  false.
 		virtual bool Attachable() {return false;}
-		
+
 		//! \brief Returns the object immediately attached to this object
 		//! \return the attached transformation
 		//! \details AttachedTransformation() returns NULL if there is no attachment. The non-const
 		//!   version of AttachedTransformation() always returns NULL.
-		virtual BufferedTransformation *AttachedTransformation() {assert(!Attachable()); return 0;}
-		
+		virtual BufferedTransformation *AttachedTransformation() {CRYPTOPP_ASSERT(!Attachable()); return 0;}
+
 		//! \brief Returns the object immediately attached to this object
 		//! \return the attached transformation
 		//! \details AttachedTransformation() returns NULL if there is no attachment. The non-const
@@ -1998,10 +2022,10 @@ public:
 		//! \details If a derived class does not override  Detach, then the base class throws
 		//!   NotImplemented.
 		virtual void Detach(BufferedTransformation *newAttachment = 0) {
-			CRYPTOPP_UNUSED(newAttachment); assert(!Attachable());
+			CRYPTOPP_UNUSED(newAttachment); CRYPTOPP_ASSERT(!Attachable());
 			throw NotImplemented("BufferedTransformation: this object is not attachable");
 		}
-		
+
 		//! \brief Add newAttachment to the end of attachment chain
 		//! \param newAttachment the attachment to add to the end of the chain
 		virtual void Attach(BufferedTransformation *newAttachment);
@@ -2044,7 +2068,7 @@ public:
 	//! \brief Check this object for errors
 	//! \param rng a RandomNumberGenerator for objects which use randomized testing
 	//! \param level the level of thoroughness
-	//! \return  true if the tests succeed,  false otherwise
+	//! \returns true if the tests succeed, false otherwise
 	//! \details There are four levels of thoroughness:
 	//!   <ul>
 	//!   <li>0 - using this object won't cause a crash or exception
@@ -2071,7 +2095,7 @@ public:
 	//! \throws NotImplemented
 	//! \details Save() writes the material to a BufferedTransformation.
 	//! \details If the material is a key, then the key is written with ASN.1 DER encoding. The key
-	//!   includes an object identifier with an algorthm id, like a  subjectPublicKeyInfo.
+	//!   includes an object identifier with an algorthm id, like a subjectPublicKeyInfo.
 	//! \details A "raw" key without the "key info" can be saved using a key's DEREncode() method.
 	//! \details If a derived class does not override Save(), then the base class throws
 	//!   NotImplemented().
@@ -2089,7 +2113,7 @@ public:
 	//!   <li>the key should be a "key info"
 	//!   </ul>
 	//! \details "key info" means the key should have an object identifier with an algorthm id,
-	//!   like a  subjectPublicKeyInfo.
+	//!   like a subjectPublicKeyInfo.
 	//! \details To read a "raw" key without the "key info", then call the key's BERDecode() method.
 	//! \note  Load generally does not check that the key is valid. Call Validate(), if needed.
 	virtual void Load(BufferedTransformation &bt)
@@ -2109,7 +2133,7 @@ public:
 	//!   NotImplemented.
 	//! \sa SupportsPrecomputation(), LoadPrecomputation(), SavePrecomputation()
 	virtual void Precompute(unsigned int precomputationStorage) {
-		CRYPTOPP_UNUSED(precomputationStorage); assert(!SupportsPrecomputation());
+		CRYPTOPP_UNUSED(precomputationStorage); CRYPTOPP_ASSERT(!SupportsPrecomputation());
 		throw NotImplemented("CryptoMaterial: this object does not support precomputation");
 	}
 
@@ -2118,13 +2142,13 @@ public:
 	//! \throws NotImplemented
 	//! \sa SupportsPrecomputation(), Precompute()
 	virtual void LoadPrecomputation(BufferedTransformation &storedPrecomputation)
-		{CRYPTOPP_UNUSED(storedPrecomputation); assert(!SupportsPrecomputation()); throw NotImplemented("CryptoMaterial: this object does not support precomputation");}
+		{CRYPTOPP_UNUSED(storedPrecomputation); CRYPTOPP_ASSERT(!SupportsPrecomputation()); throw NotImplemented("CryptoMaterial: this object does not support precomputation");}
 	//! \brief Save precomputation for later use
 	//! \param storedPrecomputation BufferedTransformation to write the precomputation
 	//! \throws NotImplemented
 	//! \sa SupportsPrecomputation(), Precompute()
 	virtual void SavePrecomputation(BufferedTransformation &storedPrecomputation) const
-		{CRYPTOPP_UNUSED(storedPrecomputation); assert(!SupportsPrecomputation()); throw NotImplemented("CryptoMaterial: this object does not support precomputation");}
+		{CRYPTOPP_UNUSED(storedPrecomputation); CRYPTOPP_ASSERT(!SupportsPrecomputation()); throw NotImplemented("CryptoMaterial: this object does not support precomputation");}
 
 	//! \brief Perform a quick sanity check
 	//! \details DoQuickSanityCheck() is for internal library use, and it should not be called by library users.
@@ -2159,8 +2183,8 @@ public:
 	//! \brief Generate a random key or crypto parameters
 	//! \param rng a RandomNumberGenerator to produce keying material
 	//! \param keySize the size of the key, in bits
-	//! \throws KeyingErr if a key can't be generated or algorithm parameters are invalid	
-	//! \details GenerateRandomWithKeySize calls  GenerateRandom with a  NameValuePairs
+	//! \throws KeyingErr if a key can't be generated or algorithm parameters are invalid
+	//! \details GenerateRandomWithKeySize calls  GenerateRandom with a NameValuePairs
 	//!    object with only "KeySize"
 	void GenerateRandomWithKeySize(RandomNumberGenerator &rng, unsigned int keySize);
 };
@@ -2191,7 +2215,7 @@ public:
 	//! \brief Retrieves a reference to CryptoMaterial
 	//! \return a reference to the crypto material
 	virtual CryptoMaterial & AccessMaterial() =0;
-	
+
 	//! \brief Retrieves a reference to CryptoMaterial
 	//! \return a const reference to the crypto material
 	virtual const CryptoMaterial & GetMaterial() const =0;
@@ -2201,7 +2225,7 @@ public:
 	//! \deprecated for backwards compatibility, calls <tt>AccessMaterial().Load(bt)</tt>
 	void BERDecode(BufferedTransformation &bt)
 		{AccessMaterial().Load(bt);}
-	
+
 	//! \brief Saves this object to a BufferedTransformation
 	//! \param bt a BufferedTransformation object
 	//! \deprecated for backwards compatibility, calls GetMaterial().Save(bt)
@@ -2218,7 +2242,7 @@ public:
 #endif
 
 	// VC60 workaround: no co-variant return type
-	
+
 	//! \brief Retrieves a reference to a Public Key
 	//! \return a reference to the public key
 	CryptoMaterial & AccessMaterial()
@@ -2301,7 +2325,7 @@ public:
 	//! \details This function returns 0 if plaintextLength is not valid (too long).
 	virtual size_t CiphertextLength(size_t plaintextLength) const =0;
 
-	//! \brief Determines whether this object supports the use of a named parameter 
+	//! \brief Determines whether this object supports the use of a named parameter
 	//! \param name the name of the parameter
 	//! \return true if the parameter name is supported, false otherwise
 	//! \details Some possible parameter names: EncodingParameters(), KeyDerivationParameters()
@@ -2320,7 +2344,7 @@ public:
 	//! \details FixedMaxPlaintextLength(0 returns the maximum plaintext length given the fixed ciphertext
 	//!   length, if one exists, otherwise return 0.
 	virtual size_t FixedMaxPlaintextLength() const {return 0;}
-	
+
 #ifdef CRYPTOPP_MAINTAIN_BACKWARDS_COMPATIBILITY
 	size_t MaxPlainTextLength(size_t cipherTextLength) const {return MaxPlaintextLength(cipherTextLength);}
 	size_t CipherTextLength(size_t plainTextLength) const {return CiphertextLength(plainTextLength);}
@@ -2349,8 +2373,8 @@ public:
 	//! \pre <tt>COUNTOF(ciphertext) == CiphertextLength(plaintextLength)</tt> ensures the output
 	//!   byte buffer is large enough.
 	//! \sa PK_Decryptor
-	virtual void Encrypt(RandomNumberGenerator &rng, 
-		const byte *plaintext, size_t plaintextLength, 
+	virtual void Encrypt(RandomNumberGenerator &rng,
+		const byte *plaintext, size_t plaintextLength,
 		byte *ciphertext, const NameValuePairs &parameters = g_nullNameValuePairs) const =0;
 
 	//! \brief Create a new encryption filter
@@ -2386,8 +2410,8 @@ public:
 	//! \pre <tt>COUNTOF(plaintext) == MaxPlaintextLength(ciphertextLength)</tt> ensures the output
 	//!   byte buffer is large enough
 	//! \sa PK_Encryptor
-	virtual DecodingResult Decrypt(RandomNumberGenerator &rng, 
-		const byte *ciphertext, size_t ciphertextLength, 
+	virtual DecodingResult Decrypt(RandomNumberGenerator &rng,
+		const byte *ciphertext, size_t ciphertextLength,
 		byte *plaintext, const NameValuePairs &parameters = g_nullNameValuePairs) const =0;
 
 	//! \brief Create a new decryption filter
@@ -2396,7 +2420,7 @@ public:
 	//! \param parameters a set of NameValuePairs to initialize this object
 	//! \return the newly created decryption filter
 	//! \note the caller is responsible for deleting the returned pointer
-	virtual BufferedTransformation * CreateDecryptionFilter(RandomNumberGenerator &rng, 
+	virtual BufferedTransformation * CreateDecryptionFilter(RandomNumberGenerator &rng,
 		BufferedTransformation *attachment=NULL, const NameValuePairs &parameters = g_nullNameValuePairs) const;
 
 	//! \brief Decrypt a fixed size ciphertext
@@ -2512,7 +2536,7 @@ public:
 		{throw NotImplemented("PK_MessageAccumulator: DigestSize() should not be called");}
 
 	//! \warning TruncatedFinal() should not be called on PK_MessageAccumulator
-	void TruncatedFinal(byte *digest, size_t digestSize) 
+	void TruncatedFinal(byte *digest, size_t digestSize)
 	{
 		CRYPTOPP_UNUSED(digest); CRYPTOPP_UNUSED(digestSize);
 		throw NotImplemented("PK_MessageAccumulator: TruncatedFinal() should not be called");
@@ -2577,7 +2601,7 @@ public:
 	//! \param signature a block of bytes for the signature
 	//! \return actual signature length
 	//! \pre <tt>COUNTOF(signature) == MaxSignatureLength(recoverableMessageLength)</tt>
-	virtual size_t SignMessageWithRecovery(RandomNumberGenerator &rng, const byte *recoverableMessage, size_t recoverableMessageLength, 
+	virtual size_t SignMessageWithRecovery(RandomNumberGenerator &rng, const byte *recoverableMessage, size_t recoverableMessageLength,
 		const byte *nonrecoverableMessage, size_t nonrecoverableMessageLength, byte *signature) const;
 };
 
@@ -2616,7 +2640,7 @@ public:
 	//! \brief Check whether messageAccumulator contains a valid signature and message, and restart messageAccumulator
 	//! \param messageAccumulator a reference to a PK_MessageAccumulator derived class
 	//! \return true if the signature is valid, false otherwise
-	//! \details VerifyAndRestart() restarts the messageAccumulator 
+	//! \details VerifyAndRestart() restarts the messageAccumulator
 	virtual bool VerifyAndRestart(PK_MessageAccumulator &messageAccumulator) const =0;
 
 	//! \brief Check whether input signature is a valid signature for input message
@@ -2625,7 +2649,7 @@ public:
 	//! \param signature a pointer to the signature over the message
 	//! \param signatureLen the size of the signature
 	//! \return true if the signature is valid, false otherwise
-	virtual bool VerifyMessage(const byte *message, size_t messageLen, 
+	virtual bool VerifyMessage(const byte *message, size_t messageLen,
 		const byte *signature, size_t signatureLen) const;
 
 	//! \brief Recover a message from its signature
@@ -2652,7 +2676,7 @@ public:
 	//! \param signatureLength the size of the signature
 	//! \return the result of the verification operation
 	//! \pre <tt>COUNTOF(recoveredMessage) == MaxRecoverableLengthFromSignatureLength(signatureLength)</tt>
-	virtual DecodingResult RecoverMessage(byte *recoveredMessage, 
+	virtual DecodingResult RecoverMessage(byte *recoveredMessage,
 		const byte *nonrecoverableMessage, size_t nonrecoverableMessageLength,
 		const byte *signature, size_t signatureLength) const;
 };
@@ -2910,9 +2934,9 @@ public:
 	virtual ~PasswordAuthenticatedKeyAgreementSession() {}
 #endif
 
-	void InitializePasswordAuthenticatedKeyAgreementSession(RandomNumberGenerator &rng, 
-		const byte *myId, unsigned int myIdLength, 
-		const byte *counterPartyId, unsigned int counterPartyIdLength, 
+	void InitializePasswordAuthenticatedKeyAgreementSession(RandomNumberGenerator &rng,
+		const byte *myId, unsigned int myIdLength,
+		const byte *counterPartyId, unsigned int counterPartyIdLength,
 		const byte *passwordOrVerifier, unsigned int passwordOrVerifierLength);
 };
 
@@ -2940,7 +2964,7 @@ public:
 //! \brief Exception thrown when an ASN.1 BER decoing error is encountered
 class CRYPTOPP_DLL BERDecodeErr : public InvalidArgument
 {
-public: 
+public:
 	BERDecodeErr() : InvalidArgument("BER decode error") {}
 	BERDecodeErr(const std::string &s) : InvalidArgument(s) {}
 };
@@ -2953,17 +2977,17 @@ class CRYPTOPP_DLL CRYPTOPP_NO_VTABLE ASN1Object
 {
 public:
 	virtual ~ASN1Object() {}
-	
+
 	//! \brief Decode this object from a BufferedTransformation
 	//! \param bt BufferedTransformation object
 	//! \details Uses Basic Encoding Rules (BER)
 	virtual void BERDecode(BufferedTransformation &bt) =0;
-	
+
 	//! \brief Encode this object into a BufferedTransformation
 	//! \param bt BufferedTransformation object
 	//! \details Uses Distinguished Encoding Rules (DER)
 	virtual void DEREncode(BufferedTransformation &bt) const =0;
-	
+
 	//! \brief Encode this object into a BufferedTransformation
 	//! \param bt BufferedTransformation object
 	//! \details Uses Basic Encoding Rules (BER).

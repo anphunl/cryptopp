@@ -1,5 +1,6 @@
 #include "config.h"
 #include <iosfwd>
+#include <string>
 
 #if CRYPTOPP_MSC_VERSION
 # pragma warning(disable: 4100 4189 4996)
@@ -11,6 +12,10 @@
 
 USING_NAMESPACE(CryptoPP)
 USING_NAMESPACE(std)
+
+#ifndef CRYPTOPP_UNUSED
+# define CRYPTOPP_UNUSED(x) (void(x))
+#endif
 
 // Used for testing the compiler and linker in cryptest.sh
 #if defined(CRYPTOPP_ADHOC_MAIN)

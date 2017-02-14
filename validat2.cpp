@@ -18,6 +18,8 @@
 #include "dsa.h"
 #include "dh.h"
 #include "mqv.h"
+#include "hmqv.h"
+#include "fhmqv.h"
 #include "luc.h"
 #include "xtrcrypt.h"
 #include "rabin.h"
@@ -44,6 +46,10 @@
 // Aggressive stack checking with VS2005 SP1 and above.
 #if (CRYPTOPP_MSC_VERSION >= 1410)
 # pragma strict_gs_check (on)
+#endif
+
+#if CRYPTOPP_GCC_DIAGNOSTIC_AVAILABLE
+# pragma GCC diagnostic ignored "-Wdeprecated-declarations"
 #endif
 
 USING_NAMESPACE(CryptoPP)
@@ -80,7 +86,7 @@ bool ValidateBBS()
 	static const byte output2[] = {
 		0x74,0x45,0x48,0xAE,0xAC,0xB7,0x0E,0xDF,0xAF,0xD7,
 		0xD5,0x0E,0x8E,0x29,0x83,0x75,0x6B,0x27,0x46,0xA1};
-		
+
 	// Coverity finding, also see http://stackoverflow.com/a/34509163/608639.
 	StreamState ss(cout);
 	byte buf[20];
@@ -375,6 +381,240 @@ bool ValidateMQV()
 	return AuthenticatedKeyAgreementValidate(mqv);
 }
 
+bool ValidateHMQV()
+{
+	std::cout << "\nHMQV validation suite running...\n\n";
+
+	//ECHMQV< ECP >::Domain hmqvB(false /*server*/);
+	ECHMQV256 hmqvB(false);
+	FileSource f256(CRYPTOPP_DATA_DIR "TestData/hmqv256.dat", true, new HexDecoder());
+	FileSource f384(CRYPTOPP_DATA_DIR "TestData/hmqv384.dat", true, new HexDecoder());
+	FileSource f512(CRYPTOPP_DATA_DIR "TestData/hmqv512.dat", true, new HexDecoder());
+	hmqvB.AccessGroupParameters().BERDecode(f256);
+
+	std::cout << "HMQV with NIST P-256 and SHA-256:" << std::endl;
+
+	if (hmqvB.GetCryptoParameters().Validate(GlobalRNG(), 3))
+		std::cout << "passed    authenticated key agreement domain parameters validation (server)" << std::endl;
+	else
+	{
+		std::cout << "FAILED    authenticated key agreement domain parameters invalid (server)" << std::endl;
+		return false;
+	}
+
+	const OID oid = ASN1::secp256r1();
+	ECHMQV< ECP >::Domain hmqvA(oid, true /*client*/);
+
+	if (hmqvA.GetCryptoParameters().Validate(GlobalRNG(), 3))
+		std::cout << "passed    authenticated key agreement domain parameters validation (client)" << std::endl;
+	else
+	{
+		std::cout << "FAILED    authenticated key agreement domain parameters invalid (client)" << std::endl;
+		return false;
+	}
+
+	SecByteBlock sprivA(hmqvA.StaticPrivateKeyLength()), sprivB(hmqvB.StaticPrivateKeyLength());
+	SecByteBlock eprivA(hmqvA.EphemeralPrivateKeyLength()), eprivB(hmqvB.EphemeralPrivateKeyLength());
+	SecByteBlock spubA(hmqvA.StaticPublicKeyLength()), spubB(hmqvB.StaticPublicKeyLength());
+	SecByteBlock epubA(hmqvA.EphemeralPublicKeyLength()), epubB(hmqvB.EphemeralPublicKeyLength());
+	SecByteBlock valA(hmqvA.AgreedValueLength()), valB(hmqvB.AgreedValueLength());
+
+	hmqvA.GenerateStaticKeyPair(GlobalRNG(), sprivA, spubA);
+	hmqvB.GenerateStaticKeyPair(GlobalRNG(), sprivB, spubB);
+	hmqvA.GenerateEphemeralKeyPair(GlobalRNG(), eprivA, epubA);
+	hmqvB.GenerateEphemeralKeyPair(GlobalRNG(), eprivB, epubB);
+
+	memset(valA.begin(), 0x00, valA.size());
+	memset(valB.begin(), 0x11, valB.size());
+
+	if (!(hmqvA.Agree(valA, sprivA, eprivA, spubB, epubB) && hmqvB.Agree(valB, sprivB, eprivB, spubA, epubA)))
+	{
+		std::cout << "FAILED    authenticated key agreement failed" << std::endl;
+		return false;
+	}
+
+	if (memcmp(valA.begin(), valB.begin(), hmqvA.AgreedValueLength()))
+	{
+		std::cout << "FAILED    authenticated agreed values not equal" << std::endl;
+		return false;
+	}
+
+	std::cout << "passed    authenticated key agreement" << std::endl;
+
+	// Now test HMQV with NIST P-384 curve and SHA384 hash
+	std::cout << endl;
+	std::cout << "HMQV with NIST P-384 and SHA-384:" << std::endl;
+
+	ECHMQV384 hmqvB384(false);
+	hmqvB384.AccessGroupParameters().BERDecode(f384);
+
+	if (hmqvB384.GetCryptoParameters().Validate(GlobalRNG(), 3))
+		std::cout << "passed    authenticated key agreement domain parameters validation (server)" << std::endl;
+	else
+	{
+		std::cout << "FAILED    authenticated key agreement domain parameters invalid (server)" << std::endl;
+		return false;
+	}
+
+	const OID oid384 = ASN1::secp384r1();
+	ECHMQV384 hmqvA384(oid384, true /*client*/);
+
+	if (hmqvA384.GetCryptoParameters().Validate(GlobalRNG(), 3))
+		std::cout << "passed    authenticated key agreement domain parameters validation (client)" << std::endl;
+	else
+	{
+		std::cout << "FAILED    authenticated key agreement domain parameters invalid (client)" << std::endl;
+		return false;
+	}
+
+	SecByteBlock sprivA384(hmqvA384.StaticPrivateKeyLength()), sprivB384(hmqvB384.StaticPrivateKeyLength());
+	SecByteBlock eprivA384(hmqvA384.EphemeralPrivateKeyLength()), eprivB384(hmqvB384.EphemeralPrivateKeyLength());
+	SecByteBlock spubA384(hmqvA384.StaticPublicKeyLength()), spubB384(hmqvB384.StaticPublicKeyLength());
+	SecByteBlock epubA384(hmqvA384.EphemeralPublicKeyLength()), epubB384(hmqvB384.EphemeralPublicKeyLength());
+	SecByteBlock valA384(hmqvA384.AgreedValueLength()), valB384(hmqvB384.AgreedValueLength());
+
+	hmqvA384.GenerateStaticKeyPair(GlobalRNG(), sprivA384, spubA384);
+	hmqvB384.GenerateStaticKeyPair(GlobalRNG(), sprivB384, spubB384);
+	hmqvA384.GenerateEphemeralKeyPair(GlobalRNG(), eprivA384, epubA384);
+	hmqvB384.GenerateEphemeralKeyPair(GlobalRNG(), eprivB384, epubB384);
+
+	memset(valA384.begin(), 0x00, valA384.size());
+	memset(valB384.begin(), 0x11, valB384.size());
+
+	if (!(hmqvA384.Agree(valA384, sprivA384, eprivA384, spubB384, epubB384) && hmqvB384.Agree(valB384, sprivB384, eprivB384, spubA384, epubA384)))
+	{
+		std::cout << "FAILED    authenticated key agreement failed" << std::endl;
+		return false;
+	}
+
+	if (memcmp(valA384.begin(), valB384.begin(), hmqvA384.AgreedValueLength()))
+	{
+		std::cout << "FAILED    authenticated agreed values not equal" << std::endl;
+		return false;
+	}
+
+	std::cout << "passed    authenticated key agreement" << std::endl;
+
+	return true;
+}
+
+bool ValidateFHMQV()
+{
+	std::cout << "\nFHMQV validation suite running...\n\n";
+
+	//ECFHMQV< ECP >::Domain fhmqvB(false /*server*/);
+	ECFHMQV256 fhmqvB(false);
+	FileSource f256(CRYPTOPP_DATA_DIR "TestData/fhmqv256.dat", true, new HexDecoder());
+	FileSource f384(CRYPTOPP_DATA_DIR "TestData/fhmqv384.dat", true, new HexDecoder());
+	FileSource f512(CRYPTOPP_DATA_DIR "TestData/fhmqv512.dat", true, new HexDecoder());
+	fhmqvB.AccessGroupParameters().BERDecode(f256);
+
+	std::cout << "FHMQV with NIST P-256 and SHA-256:" << std::endl;
+
+	if (fhmqvB.GetCryptoParameters().Validate(GlobalRNG(), 3))
+		std::cout << "passed    authenticated key agreement domain parameters validation (server)" << std::endl;
+	else
+	{
+		std::cout << "FAILED    authenticated key agreement domain parameters invalid (server)" << std::endl;
+		return false;
+	}
+
+	const OID oid = ASN1::secp256r1();
+	ECFHMQV< ECP >::Domain fhmqvA(oid, true /*client*/);
+
+	if (fhmqvA.GetCryptoParameters().Validate(GlobalRNG(), 3))
+		std::cout << "passed    authenticated key agreement domain parameters validation (client)" << std::endl;
+	else
+	{
+		std::cout << "FAILED    authenticated key agreement domain parameters invalid (client)" << std::endl;
+		return false;
+	}
+
+	SecByteBlock sprivA(fhmqvA.StaticPrivateKeyLength()), sprivB(fhmqvB.StaticPrivateKeyLength());
+	SecByteBlock eprivA(fhmqvA.EphemeralPrivateKeyLength()), eprivB(fhmqvB.EphemeralPrivateKeyLength());
+	SecByteBlock spubA(fhmqvA.StaticPublicKeyLength()), spubB(fhmqvB.StaticPublicKeyLength());
+	SecByteBlock epubA(fhmqvA.EphemeralPublicKeyLength()), epubB(fhmqvB.EphemeralPublicKeyLength());
+	SecByteBlock valA(fhmqvA.AgreedValueLength()), valB(fhmqvB.AgreedValueLength());
+
+	fhmqvA.GenerateStaticKeyPair(GlobalRNG(), sprivA, spubA);
+	fhmqvB.GenerateStaticKeyPair(GlobalRNG(), sprivB, spubB);
+	fhmqvA.GenerateEphemeralKeyPair(GlobalRNG(), eprivA, epubA);
+	fhmqvB.GenerateEphemeralKeyPair(GlobalRNG(), eprivB, epubB);
+
+	memset(valA.begin(), 0x00, valA.size());
+	memset(valB.begin(), 0x11, valB.size());
+
+	if (!(fhmqvA.Agree(valA, sprivA, eprivA, spubB, epubB) && fhmqvB.Agree(valB, sprivB, eprivB, spubA, epubA)))
+	{
+		std::cout << "FAILED    authenticated key agreement failed" << std::endl;
+		return false;
+	}
+
+	if (memcmp(valA.begin(), valB.begin(), fhmqvA.AgreedValueLength()))
+	{
+		std::cout << "FAILED    authenticated agreed values not equal" << std::endl;
+		return false;
+	}
+
+	std::cout << "passed    authenticated key agreement" << std::endl;
+
+	// Now test FHMQV with NIST P-384 curve and SHA384 hash
+	std::cout << endl;
+	std::cout << "FHMQV with NIST P-384 and SHA-384:" << std::endl;
+
+	ECHMQV384 fhmqvB384(false);
+	fhmqvB384.AccessGroupParameters().BERDecode(f384);
+
+	if (fhmqvB384.GetCryptoParameters().Validate(GlobalRNG(), 3))
+		std::cout << "passed    authenticated key agreement domain parameters validation (server)" << std::endl;
+	else
+	{
+		std::cout << "FAILED    authenticated key agreement domain parameters invalid (server)" << std::endl;
+		return false;
+	}
+
+	const OID oid384 = ASN1::secp384r1();
+	ECHMQV384 fhmqvA384(oid384, true /*client*/);
+
+	if (fhmqvA384.GetCryptoParameters().Validate(GlobalRNG(), 3))
+		std::cout << "passed    authenticated key agreement domain parameters validation (client)" << std::endl;
+	else
+	{
+		std::cout << "FAILED    authenticated key agreement domain parameters invalid (client)" << std::endl;
+		return false;
+	}
+
+	SecByteBlock sprivA384(fhmqvA384.StaticPrivateKeyLength()), sprivB384(fhmqvB384.StaticPrivateKeyLength());
+	SecByteBlock eprivA384(fhmqvA384.EphemeralPrivateKeyLength()), eprivB384(fhmqvB384.EphemeralPrivateKeyLength());
+	SecByteBlock spubA384(fhmqvA384.StaticPublicKeyLength()), spubB384(fhmqvB384.StaticPublicKeyLength());
+	SecByteBlock epubA384(fhmqvA384.EphemeralPublicKeyLength()), epubB384(fhmqvB384.EphemeralPublicKeyLength());
+	SecByteBlock valA384(fhmqvA384.AgreedValueLength()), valB384(fhmqvB384.AgreedValueLength());
+
+	fhmqvA384.GenerateStaticKeyPair(GlobalRNG(), sprivA384, spubA384);
+	fhmqvB384.GenerateStaticKeyPair(GlobalRNG(), sprivB384, spubB384);
+	fhmqvA384.GenerateEphemeralKeyPair(GlobalRNG(), eprivA384, epubA384);
+	fhmqvB384.GenerateEphemeralKeyPair(GlobalRNG(), eprivB384, epubB384);
+
+	memset(valA384.begin(), 0x00, valA384.size());
+	memset(valB384.begin(), 0x11, valB384.size());
+
+	if (!(fhmqvA384.Agree(valA384, sprivA384, eprivA384, spubB384, epubB384) && fhmqvB384.Agree(valB384, sprivB384, eprivB384, spubA384, epubA384)))
+	{
+		std::cout << "FAILED    authenticated key agreement failed" << std::endl;
+		return false;
+	}
+
+	if (memcmp(valA384.begin(), valB384.begin(), fhmqvA384.AgreedValueLength()))
+	{
+		std::cout << "FAILED    authenticated agreed values not equal" << std::endl;
+		return false;
+	}
+
+	std::cout << "passed    authenticated key agreement" << std::endl;
+
+	return true;
+}
+
 bool ValidateLUC_DH()
 {
 	cout << "\nLUC-DH validation suite running...\n\n";
@@ -466,7 +706,7 @@ bool ValidateDSA(bool thorough)
 	DSA::Verifier pub(priv);
 	FileSource fs2(CRYPTOPP_DATA_DIR "TestData/dsa1024b.dat", true, new HexDecoder());
 	DSA::Verifier pub1(fs2);
-	assert(pub.GetKey() == pub1.GetKey());
+	CRYPTOPP_ASSERT(pub.GetKey() == pub1.GetKey());
 	pass = SignatureValidate(priv, pub, thorough) && pass;
 	pass = RunTestDataFile(CRYPTOPP_DATA_DIR "TestVectors/dsa.txt", g_nullNameValuePairs, thorough) && pass;
 
@@ -554,14 +794,14 @@ bool ValidateBlumGoldwasser()
 }
 */
 
-#if !defined(NDEBUG) && !defined(CRYPTOPP_IMPORTS)
+#if CRYPTOPP_DEBUG && !defined(CRYPTOPP_IMPORTS)
 // Issue 64: "PolynomialMod2::operator<<=", http://github.com/weidai11/cryptopp/issues/64
 bool TestPolynomialMod2()
 {
 	bool pass1 = true, pass2 = true, pass3 = true;
 
 	cout << "\nTesting PolynomialMod2 bit operations...\n\n";
-	
+
 	static const unsigned int start = 0;
 	static const unsigned int stop = 4 * WORD_BITS + 1;
 
@@ -569,28 +809,28 @@ bool TestPolynomialMod2()
 	{
 		PolynomialMod2 p(1);
 		p <<= i;
-		
+
 		Integer n(Integer::One());
 		n <<= i;
-		
+
 		std::ostringstream oss1;
 		oss1 << p;
-		
+
 		std::string str1, str2;
-		
+
 		// str1 needs the commas removed used for grouping
 		str1 = oss1.str();
 		str1.erase(std::remove(str1.begin(), str1.end(), ','), str1.end());
-		
+
 		// str1 needs the trailing 'b' removed
 		str1.erase(str1.end() - 1);
 
 		// str2 is fine as-is
 		str2 = IntToString(n, 2);
-		
+
 		pass1 &= (str1 == str2);
 	}
-	
+
 	for (unsigned int i=start; i < stop; i++)
 	{
 		const word w((word)SIZE_MAX);
@@ -600,25 +840,25 @@ bool TestPolynomialMod2()
 
 		Integer n(Integer::POSITIVE, static_cast<lword>(w));
 		n <<= i;
-		
+
 		std::ostringstream oss1;
 		oss1 << p;
-		
+
 		std::string str1, str2;
-		
+
 		// str1 needs the commas removed used for grouping
 		str1 = oss1.str();
 		str1.erase(std::remove(str1.begin(), str1.end(), ','), str1.end());
-		
+
 		// str1 needs the trailing 'b' removed
 		str1.erase(str1.end() - 1);
 
 		// str2 is fine as-is
 		str2 = IntToString(n, 2);
-		
+
 		pass2 &= (str1 == str2);
 	}
-	
+
 	RandomNumberGenerator& prng = GlobalRNG();
 	for (unsigned int i=start; i < stop; i++)
 	{
@@ -630,16 +870,16 @@ bool TestPolynomialMod2()
 
 		Integer n(Integer::POSITIVE, static_cast<lword>(w));
 		n <<= i;
-		
+
 		std::ostringstream oss1;
 		oss1 << p;
-		
+
 		std::string str1, str2;
-		
+
 		// str1 needs the commas removed used for grouping
 		str1 = oss1.str();
 		str1.erase(std::remove(str1.begin(), str1.end(), ','), str1.end());
-		
+
 		// str1 needs the trailing 'b' removed
 		str1.erase(str1.end() - 1);
 
@@ -653,13 +893,13 @@ bool TestPolynomialMod2()
 			cout << "     str1: " << str1 << "\n";
 			cout << "     str2: " << str2 << "\n";
 		}
-		
+
 		pass3 &= (str1 == str2);
 	}
 
-	cout << (!pass1 ? "FAILED" : "passed") << "    " << "1 shifted over range [" << dec << start << "," << stop << "]" << "\n";
-	cout << (!pass2 ? "FAILED" : "passed") << "    " << "0x" << hex << word(SIZE_MAX) << dec << " shifted over range [" << start << "," << stop << "]" << "\n";
-	cout << (!pass3 ? "FAILED" : "passed") << "    " << "random values shifted over range [" << dec << start << "," << stop << "]" << "\n";
+	cout << (!pass1 ? "FAILED" : "passed") << ":  " << "1 shifted over range [" << dec << start << "," << stop << "]" << "\n";
+	cout << (!pass2 ? "FAILED" : "passed") << ":  " << "0x" << hex << word(SIZE_MAX) << dec << " shifted over range [" << start << "," << stop << "]" << "\n";
+	cout << (!pass3 ? "FAILED" : "passed") << ":  " << "random values shifted over range [" << dec << start << "," << stop << "]" << "\n";
 
 	if (!(pass1 && pass2 && pass3))
 		cout.flush();

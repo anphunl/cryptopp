@@ -12,7 +12,7 @@
 #include "secblock.h"
 
 // Clang 3.3 integrated assembler crash on Linux
-#if CRYPTOPP_BOOL_X32 || (defined(CRYPTOPP_CLANG_VERSION) && (CRYPTOPP_CLANG_VERSION < 30400))
+#if CRYPTOPP_BOOL_X32 || (defined(CRYPTOPP_LLVM_CLANG_VERSION) && (CRYPTOPP_LLVM_CLANG_VERSION < 30400))
 # define CRYPTOPP_DISABLE_RIJNDAEL_ASM
 #endif
 
@@ -56,7 +56,10 @@ class CRYPTOPP_DLL Rijndael : public Rijndael_Info, public BlockCipherDocumentat
 	public:
 		void ProcessAndXorBlock(const byte *inBlock, const byte *xorBlock, byte *outBlock) const;
 #if CRYPTOPP_BOOL_X64 || CRYPTOPP_BOOL_X32 || CRYPTOPP_BOOL_X86
+		Enc();
 		size_t AdvancedProcessBlocks(const byte *inBlocks, const byte *xorBlocks, byte *outBlocks, size_t length, word32 flags) const;
+	private:
+		SecByteBlock m_aliasBlock;
 #endif
 	};
 
